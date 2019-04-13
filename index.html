@@ -1,0 +1,768 @@
+<head>
+    <title>SHMetro</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://unpkg.com/d3-simple-slider"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap.min.css">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/js/bootstrap.min.js"></script>
+    <style>
+        body {
+          background-color: black;
+        }
+        /* Remove the navbar's default margin-bottom and rounded borders */ 
+        .navbar {
+          margin-bottom: 0;
+          border-radius: 0;
+        }
+        
+        /* Add a gray background color and some padding to the footer */
+        footer {
+          background-color: #f2f2f2;
+          padding: 25px;
+        }
+
+        .panel-body {background:#000000;}
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-inverse">
+        <div class="container-fluid  ">
+             <h class="navbar-brand" >SHMetro</h>
+        </div>
+    </nav>
+<div class="container text-center">
+    <h5>Please try hover effect on moving circles and bars when the animation is playing.</h5>
+    <h3>Animation: <button id="play-button">Pause</button></h3>
+    <div class="row align-items-center">
+        <div class="col-md-4">
+            <div class="panel panel-default">
+                <div class="panel-heading" style="background-color: #212121; color:#FFFFFF; border-color: #212121">GeoMap</div>
+                <div class="panel-body" ><svg id="geo"/></div>
+                <div class="panel-footer">SHMetro's 17 lines</div>
+            </div>  
+        </div>
+        <div class="col-md-2">
+            <div class="panel panel-default">
+                <div class="panel-heading" style="background-color: #212121; color:#FFFFFF; border-color: #212121">Line 5</div>
+                <div class="panel-body"><svg id="geolarge"/></div>
+                <div class="panel-footer">Line 5 Enlarged View</div>
+            </div>  
+        </div>
+        <div class="col-md-6">
+            <div class="panel panel-default">
+                <div class="panel-heading" style="background-color: #212121; color:#FFFFFF; border-color: #212121">Passenger Load</div>
+                <div class="panel-body"><svg id="passengerNo"/></div>
+                <div class="panel-footer">Each bar represents one metro and the height denotes the passenger load.</div>
+            </div>  
+        </div>
+    </div>
+    <div class="row align-items-center">
+      
+                
+            <div class="col-sm-1">
+                <div class="panel panel-default">
+                    <div class="panel-heading" style="background-color: #212121; color:#FFFFFF; border-color: #212121">Time</div>
+                    <div class="panel-body"><p class="text-center" id="time" style="font-size: 15px; font-weight: bold;">05:00</p></div>
+                </div> 
+            </div>
+            <div class="col-sm-11">
+                  <svg id="timerSVG"></svg>
+            </div>
+                
+        
+        
+    </div>
+
+
+</div>
+
+</body>
+
+<style>
+
+
+</style>
+
+<script>
+/*
+
+Ref: https://bl.ocks.org/officeofjane/47d2b0bfeecfcb41d2212d06d095c763
+Ref: https://bl.ocks.org/johnwalley/e1d256b81e51da68f7feb632a53c3518
+*/
+var timerSVG=d3.select("#timerSVG");
+timerSVG.width=1000;
+timerSVG.height=160;
+timerSVG.attr("width",timerSVG.width).attr("height",timerSVG.height);
+timerSVG.margin = ({top: 20, right: 40, bottom: 60, left: 20});
+var timerCanvas=timerSVG.append("svg").append("g").attr("id","timerCanvas");
+timerCanvas.width=timerSVG.width-timerSVG.margin.left-timerSVG.margin.right;
+timerCanvas.height=timerSVG.height-timerSVG.margin.top-timerSVG.margin.bottom;
+timerCanvas.attr("width",timerCanvas.width).attr("height",timerCanvas.height)
+           .attr("transform","translate("+timerSVG.margin.left+","+timerSVG.margin.top+")");
+// timerCanvas.append("rect")
+//     .attr("width", timerCanvas.width)
+//     .attr("height", timerCanvas.height)
+//     .attr("fill", "pink");
+
+//5:00am
+var currentTime=300;
+//22:18
+var targetTime=1338;
+
+timerCanvas.append("input");
+var sliderXscale=d3.scaleLinear()
+                   .domain([300,targetTime])
+                   .range([0,timerCanvas.width]);
+var sliderYscale=d3.scaleLinear()
+                   .domain([0,6])
+                   .range([timerCanvas.height,0]);
+
+
+/*
+Axis drawing
+*/
+
+                 
+var SliderYAxis = d3.axisLeft(sliderYscale).ticks(3);
+timerCanvasYaxis=timerCanvas.append("g");
+timerCanvasYaxis.call(SliderYAxis)
+                 .selectAll("line,path")
+                 .style("stroke","grey");
+timerCanvasYaxis.append("text")
+                    .attr("class","label")
+                    .style("font-size","10pt")
+                    .attr("x",0)
+                    .attr("y",-10)
+                    .style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("Metros");
+timerCanvas.append("text")
+                    .attr("class","label")
+                    .style("font-size","10pt")
+                    .attr("x",timerCanvas.width/2+20)
+                    .attr("y",timerCanvas.height+50)
+                    .style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("Time (mins)");
+//TimerLine chart
+d3.json('trains.json').then(function(data) {
+    //draw basic line
+    var timerline= timerCanvas.selectAll(".timerline").data(data);
+    var oldx=sliderXscale(300);
+    var oldy=sliderYscale(0);
+    timerline.enter().append("line").attr("class","timerline")
+         .attr("x1",function(d,i){if (i==0){return oldx; }  else{return sliderXscale(+data[i-1][0][0])} } )
+         .attr("y1",function(d,i){if (i==0){return oldy; }  else{return sliderYscale(data[i-1].length);} })
+         .attr("x2",function(d){return sliderXscale(+d[0][0]);} )
+         .attr("y2",function(d){return sliderYscale(d.length);} )
+         .style("stroke","grey");
+
+    });
+
+function minsToTime(m){
+    h=Math.floor(m/60);
+    m=m%60;
+    if(h<10){h="0"+h;}
+    if(m<10){m="0"+m;}
+    return h+":"+m;
+}
+
+
+</script>
+
+<script>
+//console.log(d3);
+/*
+canvas and margin setting
+*/
+var passengerNo=d3.select("#passengerNo");
+passengerNo.width=550;
+passengerNo.height=300;
+passengerNo.attr("width",passengerNo.width).attr("height",passengerNo.height);
+passengerNo.margin = ({top: 20, right: 20, bottom: 45, left: 35});
+
+var passengerNoCanvas=passengerNo.append("svg").append("g").attr("id","Barcanvas");
+passengerNoCanvas.width=passengerNo.width-passengerNo.margin.left-passengerNo.margin.right;
+passengerNoCanvas.height=passengerNo.height-passengerNo.margin.top-passengerNo.margin.bottom;
+passengerNoCanvas.attr("width", passengerNoCanvas.width)
+         .attr("height", passengerNoCanvas.height)
+         .attr("transform","translate("+passengerNo.margin.left+","+passengerNo.margin.top+")");
+
+
+/*
+scale setting
+*/
+var MetroCscale=d3.scaleOrdinal()
+             .domain([0,10])
+             .range(d3.schemeCategory10);
+
+var MetroBarXscale=d3.scaleBand()
+             .domain(["闵行开发区", "文井路", "华宁路", "金平路", "东川路", "剑川路", "北桥", "颛桥", "银都路", "春申路", "莘庄"])
+             .range([0,passengerNoCanvas.width]);
+
+var MetroBarYscale=d3.scaleLinear()
+             .domain([0,1700])
+             .range([passengerNoCanvas.height, 0]);
+
+/*
+Axis drawing
+*/
+var MetroBarXAxis = d3.axisBottom(MetroBarXscale);
+passengerNoCanvasXaxis=passengerNoCanvas.append("g")
+                 .attr("transform", "translate(0," + passengerNoCanvas.height+ ")");
+passengerNoCanvasXaxis.call(MetroBarXAxis)
+                 .selectAll("line,path")
+                 .style("stroke","grey");
+passengerNoCanvasXaxis.append("text")
+                    .attr("class","label")
+                    .style("font-size","10pt")
+                    .attr("x",passengerNoCanvas.width/2)
+                    .attr("y",45)
+                    .style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("Line Five Stations");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("闵行开发区")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("MinHang");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("文井路")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("WenJin");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("华宁路")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("HuaNin");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("金平路")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("JinPing");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("东川路")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("DongC");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("剑川路")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("JianChuan");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("北桥")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("BeiQiao");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("颛桥")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("ZhuanQiao");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("银都路")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("YinDu");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("春申路")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("ChunShen");
+passengerNoCanvasXaxis.append("text").style("font-size","7pt")
+                    .attr("x",MetroBarXscale("莘庄")+MetroBarXscale.bandwidth()/2)
+                    .attr("y",30).style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("ZiZhuang");
+
+var MetroBarYAxis = d3.axisLeft(MetroBarYscale);
+passengerNoCanvasYaxis=passengerNoCanvas.append("g");
+passengerNoCanvasYaxis.call(MetroBarYAxis)
+                 .selectAll("line,path")
+                 .style("stroke","grey");
+passengerNoCanvasYaxis.append("text")
+                    .attr("class","label")
+                    .style("font-size","10pt")
+                    .attr("x",-15)
+                    .attr("y",-5)
+                    .style("fill","black")
+                    .style("text-anchor","middle")
+                    .text("Load");
+
+
+function StationMouseOver(d){
+                    console.log(d.img);
+                    geocanvas.append("svg:image")
+                    .attr('id',"stationIMG")
+                    .attr('x', 100)
+                    .attr('y', 100)
+                    .attr('width', 200)
+                    .attr('height', 248)
+                    .attr("xlink:href", "/stationIMG/"+d.img)
+                }
+function StationMouseOut(d){
+                    geocanvas.select("#stationIMG").remove();
+                }
+
+function barXPosition(d){
+    /*
+    Input d: [[station i, station i+1], position]
+           e.g. if at the middle of 2 stations, position=0.5
+    Output: the position on x axis on passengerNoCanvas.
+    */
+    
+    return MetroBarXscale(d[0][0]) + ( MetroBarXscale(d[0][1]) - MetroBarXscale(d[0][0]) ) * d[1]
+
+}
+
+
+
+
+</script>
+
+<script>
+//geocanvas setting
+var geo = d3.select("#geo");
+geo.width=330;
+geo.height=300;
+geo.attr("width",geo.width).attr("height",geo.height);
+geo.margin = ({top: 5, right: 5, bottom: 5, left: 5});
+
+var geocanvas=geo.append("svg").append("g");
+geocanvas.width=geo.width-geo.margin.left-geo.margin.right;
+geocanvas.height=geo.height-geo.margin.top-geo.margin.bottom;
+geocanvas.attr("width", geocanvas.width)
+         .attr("height", geocanvas.height)
+         .attr("transform","translate("+geo.margin.left+","+geo.margin.top+")");
+
+// var cscale=d3.scaleOrdinal()
+//              .domain([0,16])
+//              .range(d3.schemeCategory10)
+var yellow = "#FFC039",
+    orange = "#FF9339",
+    red = "#FF1907",
+    lawngreen="#7CFC00",
+    rebeccapurple="#663399",
+    mediumslateblue="#7b68ee",
+    orchid="#da70d6",
+    blue="#4169E1",
+    lightskyblue="#87cefa",
+    mediumpurple="#9370db",
+    saddlebrown="#8b4513",
+    green="#00FF00",
+    lightpink="#FFC0CB",
+    mediumaquamarine="#66DDAA";
+var color=[red,lawngreen,yellow,rebeccapurple,mediumslateblue,orchid,orange,blue,lightskyblue,mediumpurple,saddlebrown,green,lightpink,red,red,mediumaquamarine];
+var cscale=d3.scaleOrdinal()
+             .domain([1,16])
+             .range(color);
+
+function geoxscale(d){
+    return d3.scaleLinear()
+             .domain([d3.min(d,function(d){return +d.LNG}),d3.max(d,function(d){return +d.LNG})])
+             .range([0,geocanvas.width]);
+}
+function geoyscale(d){
+    return d3.scaleLinear()
+             .domain([d3.min(d,function(d){return +d.LAT}),d3.max(d,function(d){return +d.LAT})])
+             .range([geocanvas.height,0]);
+}
+</script>
+
+<script>
+
+//geolargecanvas setting
+var geolarge = d3.select("#geolarge");
+geolarge.width=130;
+geolarge.height=300;
+geolarge.attr("width",geolarge.width).attr("height",geolarge.height);
+geolarge.margin = ({top: 15, right: 14, bottom: 5, left: 5});
+
+var geolargecanvas=geolarge.append("svg").append("g");
+geolargecanvas.width=geolarge.width-geolarge.margin.left-geolarge.margin.right;
+geolargecanvas.height=geolarge.height-geolarge.margin.top-geolarge.margin.bottom;
+geolargecanvas.attr("width", geolargecanvas.width)
+         .attr("height", geolargecanvas.height)
+         .attr("transform","translate("+geolarge.margin.left+","+geolarge.margin.top+")");
+
+function fivegeoxscale(d){
+    return d3.scaleLinear()
+             .domain([d3.min(d,function(d){return +d.LNG}),d3.max(d,function(d){return +d.LNG})])
+             .range([0,geolargecanvas.width]);
+}
+function fivegeoyscale(d){
+    return d3.scaleLinear()
+             .domain([d3.min(d,function(d){return +d.LAT}),d3.max(d,function(d){return +d.LAT})])
+             .range([geolargecanvas.height,0]);
+}
+
+
+</script>
+
+<script>
+
+d3.json('connections_by_station_name.json').then(function(d) {
+	connections=d;
+	d3.json('stations_by_name.json').then(function(d){
+        console.log(d);
+		stations=d3.values(d);
+        stationsraw=d;
+		geox=geoxscale(stations);
+        geoy=geoyscale(stations);
+        geocanvas.selectAll(".GeoStationDot")
+                 .data(stations)
+                 .enter().append("circle")
+                 .attr("class","GeoStationDot")
+                 .attr("id", function(d){console.log(d); return d.ST_NAME_EN; })
+                 .attr("r",1)
+                 .attr("cx",function(d){return geox(+d.LNG)})
+                 .attr("cy",function(d){return geoy(+d.LAT)})
+                 .style("fill",function(d){return cscale(d.LINE_NO)})
+                 .style("fill-opacity","0.5")
+                 .style("stroke",function(d){return cscale(d.LINE_NO)})
+                 .style("stroke-opacity","1")
+                 .on("mouseover", function(d){StationMouseOver(d)})
+                 .on("mouseout", function(d){StationMouseOut(d)})
+	
+
+        geocanvas.selectAll(".connection")
+             .data(connections)
+             .enter().append("line")
+             .attr("class","connection")
+             .attr("id",function(d){return d[0]+'-'+d[1]+"line"+d[2];})
+             .attr("stroke",function(d){return cscale(+d[2])})
+             .attr("stroke-linecap", "round")
+             .attr("x1", function(d) { return geox(+(stationsraw[d[0]].LNG)); })
+             .attr("y1", function(d) { return geoy(+(stationsraw[d[0]].LAT)); })
+             .attr("x2", function(d) { return geox(+(stationsraw[d[1]].LNG)); })
+             .attr("y2", function(d) { return geoy(+(stationsraw[d[1]].LAT)); });
+
+        d3.json('fiveLineConnections.json').then(function(d) {
+            fiveconnections=d;
+        d3.json('fiveLineNode.json').then(function(d){
+            fivestations=d3.values(d);
+            fivestationsraw=d;
+            fivegeox=fivegeoxscale(fivestations);
+            fivegeoy=fivegeoyscale(fivestations);
+            geolargecanvas.selectAll(".GeoStationDot")
+                     .data(fivestations)
+                     .enter().append("circle")
+                     .attr("class","GeoStationDot")
+                     .attr("id", function(d){ return d.ST_NAME_EN; })
+                     .attr("r",3)
+                     .attr("cx",function(d){return fivegeox(+d.LNG)})
+                     .attr("cy",function(d){return fivegeoy(+d.LAT)})
+                     .style("fill",function(d){return cscale(d.LINE_NO)})
+                     .style("fill-opacity","0.5")
+                     .style("stroke",function(d){return cscale(d.LINE_NO)})
+                     .style("stroke-opacity","1")
+        
+           console.log(fiveconnections);
+            geolargecanvas.selectAll(".connection")
+                 .data(fiveconnections)
+                 .enter().append("line")
+                 .attr("class","connection")
+                 .attr("id",function(d){console.log(d); return d[0]+'-'+d[1]+"line"+d[2];})
+                 .attr("stroke",function(d){return cscale(+d[2])})
+                 .attr("stroke-linecap", "round")
+                 .attr("x1", function(d) { return fivegeox(+(fivestationsraw[d[0]].LNG)); })
+                 .attr("y1", function(d) { return fivegeoy(+(fivestationsraw[d[0]].LAT)); })
+                 .attr("x2", function(d) { return fivegeox(+(fivestationsraw[d[1]].LNG)); })
+                 .attr("y2", function(d) { return fivegeoy(+(fivestationsraw[d[1]].LAT)); });
+
+
+
+
+
+           
+
+
+            metroCircleScale=d3.scaleLinear()
+                 .domain([0,1600])
+                 .range([2,8]);
+
+            function metroCircleX(d){
+                startStation=d[0][0];
+                endStation=d[0][1];
+                p=+d[1];
+                start=geox(+(stationsraw[startStation].LNG));
+                end=geox(+(stationsraw[endStation].LNG));
+                return start+p*(end-start);
+            }
+            function metroCircleY(d){
+                startStation=d[0][0];
+                endStation=d[0][1];
+                p=+d[1];
+                start=geoy(+(stationsraw[startStation].LAT));
+                end=geoy(+(stationsraw[endStation].LAT));
+                return start+p*(end-start);
+            }
+
+            d3.json('trains.json').then(function(d) {
+                Metro=d;
+                console.log(d);
+                var i=0;
+                var time=100;
+                var intervalTime=150;
+
+                var playButton = d3.select("#play-button");
+                var moving = true;
+                playButton.on("click",function(){
+                                var button=d3.select(this);
+                                if(button.text()=="Pause"){
+                                    moving=false;
+                                    timestep.stop();
+                                    button.text("Play");
+                                }else{
+                                    moving=true;
+                                    timestep=d3.interval(function(){step()},intervalTime);
+                                    button.text("Pause");
+                                }
+                            });
+
+                function step(){
+                    barUpdate(Metro[i],time,time*1.3);
+                    mapUpdate(Metro[i],time);
+                    largemapUpdate(Metro[i],time);
+                    d3.select("#time").node().innerHTML=minsToTime(i+300);
+                    SliderXAxis.value(i+300);
+                    i=i+1;
+                    if(i>1038){i=0}
+                }
+
+                
+                
+
+                var timestep=d3.interval(function(){step()},100);
+        
+            
+
+                function mapUpdate(d,time){
+                    /*
+                    Input data: Array(n), n denotes the # of metro on the line at this moment.
+                    Element in Array(n): [nowTime, startTime, [[station i, station i+1], position] ,people#] 
+                    */
+                    var t = d3.transition().duration(time);
+                    //Here, d[1] denotes the start time in second.
+                    var circle= geocanvas.selectAll(".metrocircle")
+                              .data(d,function(d){a=d[1]; return a});
+                    //Exit and remove old elements
+                    circle.exit().transition(t)
+                        .attr("class","exit")
+                        .attr("r",0)
+                        .style('fill-opacity', 1e-6)
+                        .remove();
+                    //Enter new elements as needed
+                    circle.enter().append("circle")
+                                .attr("id",function(d){return "circle"+d[1]})
+                                .attr("class","metroCircle")
+                                .attr("cx",function(d){return metroCircleX(d[2])} )
+                                .attr("cy",function(d){return metroCircleY(d[2])} )
+                                .attr("r",1)
+                                .style("fill","white")
+                                .on("mouseover", function(d){handleMouseOver(d[1])})
+                                .on("mouseout", function(d){handleMouseOut(d[1])})
+                        .transition(t)
+                                .attr("r",function(d){return metroCircleScale(d[3])});
+
+                    //Update old elements as needed
+                    circle.transition(t)
+                        .attr("cx",function(d){return metroCircleX(d[2])} )
+                        .attr("cy",function(d){return metroCircleY(d[2])} )
+                        .attr("r",function(d){return metroCircleScale(d[3])});
+
+                }
+
+
+
+                function fiveCircleX(d){
+                    startStation=d[0][0];
+                    endStation=d[0][1];
+                    p=+d[1];
+                    start=fivegeox(+(fivestationsraw[startStation].LNG));
+                    end=fivegeox(+(fivestationsraw[endStation].LNG));
+                    return start+p*(end-start);
+                }
+                function fiveCircleY(d){
+                    startStation=d[0][0];
+                    endStation=d[0][1];
+                    p=+d[1];
+                    start=fivegeoy(+(fivestationsraw[startStation].LAT));
+                    end=fivegeoy(+(fivestationsraw[endStation].LAT));
+                    return start+p*(end-start);
+                }
+
+                function largemapUpdate(d,time){
+                    /*
+                    Input data: Array(n), n denotes the # of metro on the line at this moment.
+                    Element in Array(n): [nowTime, startTime, [[station i, station i+1], position] ,people#] 
+                    */
+                    var t = d3.transition().duration(time);
+                    //Here, d[1] denotes the start time in second.
+                    var circle= geolargecanvas.selectAll(".metrocircle")
+                              .data(d,function(d){a=d[1]; return a});
+                    //Exit and remove old elements
+                    circle.exit().transition(t)
+                        .attr("class","exit")
+                        .attr("r",0)
+                        .style('fill-opacity', 1e-6)
+                        .remove();
+                    //Enter new elements as needed
+                    circle.enter().append("circle")
+                                .attr("id",function(d){return "largecircle"+d[1];})
+                                .attr("class","metroCircle")
+                                .attr("cx",function(d){ fiveCircleX(d[2])} )
+                                .attr("cy",function(d){return fiveCircleY(d[2])} )
+                                .attr("r",1)
+                                .style("fill","white")
+                                .on("mouseover", function(d){handleMouseOver(d[1])})
+                                .on("mouseout", function(d){handleMouseOut(d[1])})
+                        .transition(t)
+                                .attr("r",function(d){return 3*metroCircleScale(d[3])});
+
+                    //Update old elements as needed
+                    circle.transition(t)
+                        .attr("cx",function(d){return fiveCircleX(d[2])} )
+                        .attr("cy",function(d){return fiveCircleY(d[2])} )
+                        .attr("r",function(d){return 3*metroCircleScale(d[3])});
+
+                }
+
+                function barUpdate(d,time,exitTime){
+                    /*
+                    Input data: Array(n), n denotes the # of metro on the line at this moment.
+                    Element in Array(n): [nowTime, startTime, [[station i, station i+1], position] ,people#] 
+                    */
+                    var t = d3.transition().duration(time);
+                    //Here, d[1] denotes the start time in second.
+                    var bars= passengerNoCanvas.selectAll("rect")
+                              .data(d,function(d){a=d[1]; return a});
+                    //Exit and remove old elements
+                    bars.exit().transition(exitTime)
+                        .attr("class","exit")
+                        .attr("x",function(d){return MetroBarXscale("莘庄")+MetroBarXscale.bandwidth()/2;})
+                        .attr("y",MetroBarYscale(0))
+                        .attr("height",0)
+                        .style('fill-opacity', 1e-6)
+                        .remove();
+                    //Enter new elements as needed
+                    bars.enter().append("rect")
+                                .attr("id",function(d){return "bar"+d[1];})
+                                .attr("class","bar")
+                                .attr("x",function(d){return barXPosition(d[2])} )
+                                .attr("y",MetroBarYscale(0))
+                                .attr("width",MetroBarXscale.bandwidth()/3)
+                                .attr("height",0)
+                                .style("fill","white")
+                                .on("mouseover", function(d){handleMouseOver(d[1])})
+                                .on("mouseout", function(d){handleMouseOut(d[1])})
+                        .transition(t)
+                                .attr("y",function(d){return MetroBarYscale(d[3])})
+                                .attr("height",function(d){a=MetroBarYscale(0)-MetroBarYscale(d[3]); return a;});
+
+                    //Update old elements as needed
+                    bars.transition(t).attr("class","update")
+                        .attr("x",function(d){return barXPosition(d[2])})
+                        .attr("y",function(d){return MetroBarYscale(d[3])})
+                        .attr("height",function(d){a=MetroBarYscale(0)-MetroBarYscale(d[3]); return a;});
+
+                }
+                var sliderdrag=false;
+
+                //timer slider drawing
+                var SliderXAxis = d3.sliderBottom(sliderXscale).step(1).fill("grey")
+                    .on('start',function(){ if (moving==true){sliderdrag=true; timestep.stop();}  })
+                    .on('onchange', value => draw(value))
+                    .on('end',function(){
+                        sliderdrag=false;
+                        if (moving==true){
+                            timestep=d3.interval(function(){step()},intervalTime);
+                        }
+                        });
+                function draw(value){
+                    //draw pointer
+                    timerCanvas.select("#sliderPointer").remove();
+                    timerCanvas.append("line")
+                            .attr("id","sliderPointer")
+                            .attr("x1",sliderXscale(value))
+                            .attr("y1",sliderYscale(value))
+                            .attr("x2",sliderXscale(value))
+                            .attr("y2",timerCanvas.height)
+                            .style("stroke","grey");
+                    //control animation
+                    if (sliderdrag=true){
+                        barUpdate(Metro[value-300],1,0.5);
+                        mapUpdate(Metro[value-300],1);
+                        largemapUpdate(Metro[value-300],1);
+                        d3.select("#time").node().innerHTML=minsToTime(i+300);
+                        i=value-300;
+                    }
+
+
+                }
+
+
+                timerCanvas.append("g")
+                                 .attr("transform", "translate(0," + timerCanvas.height+ ")")
+                                 .call(SliderXAxis)
+                                 .selectAll("line,path")
+
+
+
+                //mouseover and mouseout function
+                function handleMouseOver(d){
+                    d3.select("#largecircle"+d)
+                     .style("fill","red");
+                    d3.select("#circle"+d)
+                     .style("fill","red");
+                    d3.select("#bar"+d)
+                     .style("fill","red");
+                    timerCanvas.append("line")
+                            .attr("id","startTimeLine")
+                            .attr("x1",sliderXscale(d))
+                            .attr("y1",sliderYscale(d))
+                            .attr("x2",sliderXscale(d))
+                            .attr("y2",timerCanvas.height)
+                            .style("stroke","red");
+                    if(playButton.text()=="Pause"){
+                        moving=false;
+                        timestep.stop();
+                    }
+                    
+                }
+                function handleMouseOut(d){
+                    d3.select("#largecircle"+d)
+                     .style("fill","black");
+                    d3.select("#circle"+d)
+                     .style("fill","black");
+                    d3.select("#bar"+d)
+                     .style("fill","black");
+                    timerCanvas.select("#startTimeLine").remove();
+                    if(playButton.text()=="Pause"){
+                        moving=true;
+                        timestep=d3.interval(function(){step()},intervalTime);
+                    }
+                    
+
+                }
+               
+                
+
+            } );
+        });});
+	});
+
+
+});
+
+
+</script>
+
+
+
+
