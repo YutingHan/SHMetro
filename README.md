@@ -1,6 +1,4 @@
-Assignment 4 - Visualizations and Multiple Views
-===
-Topic: ShangHai MTR Visualization
+ShangHai MTR Visualization
 ===
 
 Working Link
